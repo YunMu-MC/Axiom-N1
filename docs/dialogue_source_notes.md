@@ -14,6 +14,12 @@ Updated: 2026-07-04
   - Reason: human-generated instruction/response records, not generative-AI-authored; small but high-signal.
   - Risk: English only and CC-BY-SA-3.0; downstream dataset manifests must preserve attribution/share-alike notes.
 
+
+- `CohereLabs/aya_collection` (`translated_dolly`, `translated_flan_cot`, `translated_flan_qa`)
+  - Status: enabled in `watch_dialogue_corpus.ps1` with Chinese/English row filtering.
+  - Reason: Apache-2.0 multilingual translated instruction data; useful to repair the current Chinese byte deficit.
+  - Risk: not all rows are coding-specific, so `reasoning`/`general` are allowed only with the existing min-score, PII, unsafe-security, and repetition filters.
+
 ## Candidate sources not enabled by default
 
 - `lmsys/lmsys-chat-1m`

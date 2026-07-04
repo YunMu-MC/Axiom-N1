@@ -423,6 +423,42 @@ SOURCE_SPECS = {
         target_field="targets",
         notes="Multilingual human-annotated prompt/target data; useful for Chinese/English balance.",
     ),
+    "aya_collection_translated_dolly": SourceSpec(
+        name="CohereLabs/aya_collection:translated_dolly",
+        dataset="CohereLabs/aya_collection",
+        config="translated_dolly",
+        split="train",
+        license_id="apache-2.0",
+        converter="prompt_target_en_zh",
+        url="https://huggingface.co/datasets/CohereLabs/aya_collection",
+        prompt_field="inputs",
+        target_field="targets",
+        notes="Aya Collection translated Dolly subset; accepts only Chinese/English rows after strict quality gates.",
+    ),
+    "aya_collection_flan_cot": SourceSpec(
+        name="CohereLabs/aya_collection:translated_flan_cot",
+        dataset="CohereLabs/aya_collection",
+        config="translated_flan_cot",
+        split="train",
+        license_id="apache-2.0",
+        converter="prompt_target_en_zh",
+        url="https://huggingface.co/datasets/CohereLabs/aya_collection",
+        prompt_field="inputs",
+        target_field="targets",
+        notes="Aya Collection translated chain-of-thought subset; accepts only Chinese/English rows.",
+    ),
+    "aya_collection_flan_qa": SourceSpec(
+        name="CohereLabs/aya_collection:translated_flan_qa",
+        dataset="CohereLabs/aya_collection",
+        config="translated_flan_qa",
+        split="train",
+        license_id="apache-2.0",
+        converter="prompt_target_en_zh",
+        url="https://huggingface.co/datasets/CohereLabs/aya_collection",
+        prompt_field="inputs",
+        target_field="targets",
+        notes="Aya Collection translated QA subset; useful for Chinese/English language-flow balance.",
+    ),
     "helpsteer2": SourceSpec(
         name="nvidia/HelpSteer2",
         dataset="nvidia/HelpSteer2",
@@ -781,6 +817,19 @@ def convert_rows(spec: SourceSpec, rows: list[dict]) -> list[ConversationRecord]
             for row in rows
         ]
         return [conversation for conversation in conversations if conversation is not None]
+    if spec.converter == "prompt_target_en_zh":
+        conversations = [
+            normalize_prompt_target_row(
+                row,
+                source=spec.name,
+                license_id=spec.license_id,
+                prompt_field=spec.prompt_field,
+                target_field=spec.target_field,
+            )
+            for row in rows
+            if row_language_is_en_or_zh(row, prompt_field=spec.prompt_field, target_field=spec.target_field)
+        ]
+        return [conversation for conversation in conversations if conversation is not None]
     if spec.converter == "helpsteer3_preference":
         conversations = [
             normalize_helpsteer3_preference_row(row, source=spec.name, license_id=spec.license_id)
@@ -808,6 +857,66 @@ def convert_rows(spec: SourceSpec, rows: list[dict]) -> list[ConversationRecord]
         ]
         return [conversation for conversation in conversations if conversation is not None]
     raise ValueError(f"Unsupported converter: {spec.converter}")
+
+
+def row_language_is_en_or_zh(row: Mapping[str, Any], *, prompt_field: str, target_field: str) -> bool:
+    language_values = [
+        row.get("language"),
+        row.get("language_code"),
+        row.get("lang"),
+        row.get("locale"),
+        row.get("script"),
+    ]
+    normalized = {str(value).strip().lower() for value in language_values if value is not None}
+    en_zh_markers = {
+        "en",
+        "eng",
+        "english",
+        "zh",
+        "zho",
+        "cmn",
+        "chinese",
+        "zh-cn",
+        "zh-hans",
+        "zh-hant",
+        "simplified chinese",
+        "traditional chinese",
+    }
+    non_target_markers = {
+        "ar",
+        "ara",
+        "de",
+        "deu",
+        "es",
+        "spa",
+        "fr",
+        "fra",
+        "hi",
+        "hin",
+        "id",
+        "ind",
+        "it",
+        "ita",
+        "ja",
+        "jpn",
+        "ko",
+        "kor",
+        "pt",
+        "por",
+        "ru",
+        "rus",
+    }
+    if normalized & en_zh_markers:
+        return True
+    if normalized & non_target_markers:
+        return False
+    prompt = str(row.get(prompt_field) or "")
+    target = str(row.get(target_field) or "")
+    text = f"{prompt}\n{target}"
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return True
+    ascii_letters = sum(1 for char in text if ("a" <= char.lower() <= "z"))
+    return ascii_letters >= 40 and ascii_letters >= max(1, len(text.strip())) * 0.35
 
 
 def normalize_dolly_row(row: dict, *, source: str, license_id: str) -> ConversationRecord | None:
@@ -1813,7 +1922,15 @@ def iter_source_conversations(
             if conversation is not None:
                 yield conversation
         return
-    if spec.converter in {"prompt_target", "helpsteer3_preference", "hh_rlhf", "dolly", "stack_exchange", "openorca"}:
+    if spec.converter in {
+        "prompt_target",
+        "prompt_target_en_zh",
+        "helpsteer3_preference",
+        "hh_rlhf",
+        "dolly",
+        "stack_exchange",
+        "openorca",
+    }:
         for row in iter_dataset_rows(spec, limit=limit, hf_endpoint=hf_endpoint, cache_dir=cache_dir):
             for conversation in convert_rows(spec, [row]):
                 yield conversation
@@ -1944,9 +2061,23 @@ def _hf_mirror_dataset_files(spec: SourceSpec, *, hf_endpoint: str, timeout: flo
         for item in siblings
         if isinstance(item, dict) and str(item.get("rfilename") or "").endswith(".parquet")
     ]
+    candidate_files = files
+    if spec.config and spec.config != "default":
+        config_markers = (
+            f"/{spec.config}/",
+            f"data/{spec.config}/",
+            f"{spec.config}/",
+        )
+        config_files = [
+            filename
+            for filename in candidate_files
+            if any(marker in f"/{filename}" or filename.startswith(marker) for marker in config_markers)
+        ]
+        if config_files:
+            candidate_files = config_files
     split_marker = f"/{spec.split}-"
-    split_files = [filename for filename in files if split_marker in f"/{filename}"]
-    return sorted(split_files or files)
+    split_files = [filename for filename in candidate_files if split_marker in f"/{filename}"]
+    return sorted(split_files or candidate_files)
 
 
 def _download_hf_mirror_file(

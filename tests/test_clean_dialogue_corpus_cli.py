@@ -15,6 +15,7 @@ from scripts.clean_dialogue_corpus import (
     build_prefilter_rows,
     convert_rows,
     iter_source_conversations,
+    _hf_mirror_dataset_files,
     load_stream_resume_state,
     next_stream_shard_index,
     source_catalog_payload,
@@ -29,7 +30,7 @@ from dopa_coder_n1.data.dialogue_cleaner import CleanPolicy, ConversationRecord,
 def test_default_sources_include_new_unrestricted_sources_and_exclude_restricted_sources():
     defaults = set(default_source_keys())
 
-    assert {"oasst1", "oasst2", "wildchat", "aya_dataset", "helpsteer3_preference"} <= defaults
+    assert {"oasst1", "oasst2", "wildchat", "aya_dataset", "aya_collection_translated_dolly", "helpsteer3_preference"} <= defaults
     assert "lmsys_chat_1m" not in defaults
     assert "ultrachat_200k" not in defaults
     assert "databricks_dolly_15k" not in defaults
@@ -87,6 +88,33 @@ def test_convert_rows_supports_added_prompt_target_and_preference_sources():
 
     assert aya_conversations[0].messages[-1]["role"] == "assistant"
     assert helpsteer_conversations[0].messages[-1]["content"].startswith("Read the assertion")
+
+
+def test_convert_rows_filters_aya_collection_to_english_and_chinese_rows():
+    spec = validate_selected_sources(["aya_collection_translated_dolly"], allow_restricted_license=False)[0]
+
+    conversations = convert_rows(
+        spec,
+        [
+            {
+                "inputs": "怎么分析 pytest 失败的根因?",
+                "targets": "先读报错和堆栈, 再构造最小复现, 最后补回归测试。",
+                "language_code": "zho",
+            },
+            {
+                "inputs": "Comment diagnostiquer une erreur pytest?",
+                "targets": "Lisez la trace puis isolez le test.",
+                "language_code": "fra",
+            },
+            {
+                "inputs": "How do I validate a tool-call JSON schema?",
+                "targets": "Check required fields, types, and edge cases before execution.",
+                "language_code": "eng",
+            },
+        ],
+    )
+
+    assert [item.metadata["language"] for item in conversations] == ["zho", "eng"]
 
 
 def test_convert_rows_supports_dolly_instruction_context_source():
@@ -498,6 +526,25 @@ def test_rows_api_streaming_yields_first_page_before_fetching_next_page(monkeypa
     assert conversation.messages[0]["content"].startswith("How do I debug")
     assert conversation.messages[-1]["content"].startswith("Read the traceback")
     assert len(calls) == 1
+
+
+def test_hf_mirror_dataset_files_prefers_requested_config(monkeypatch):
+    spec = validate_selected_sources(["aya_collection_translated_dolly"], allow_restricted_license=False)[0]
+
+    def fake_fetch_json(*args, **kwargs):
+        return {
+            "siblings": [
+                {"rfilename": "data/translated_dolly/train-00000-of-00001.parquet"},
+                {"rfilename": "data/translated_flan_cot/train-00000-of-00001.parquet"},
+                {"rfilename": "data/translated_dolly/validation-00000-of-00001.parquet"},
+            ]
+        }
+
+    monkeypatch.setattr("scripts.clean_dialogue_corpus._fetch_json", fake_fetch_json, raising=False)
+
+    assert _hf_mirror_dataset_files(spec, hf_endpoint="https://hf-mirror.com", timeout=1.0) == [
+        "data/translated_dolly/train-00000-of-00001.parquet"
+    ]
 
 
 def test_hf_mirror_parquet_backend_streams_downloaded_parquet_rows(monkeypatch, tmp_path):

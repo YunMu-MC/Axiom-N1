@@ -10,6 +10,7 @@ This project keeps the 100GB dialogue-cleaning target strict by default. Source 
 | `oasst2` | `OpenAssistant/oasst2` | Apache-2.0 | Larger follow-up OpenAssistant release; same tree/path converter. |
 | `wildchat` | `allenai/WildChat-1M` | ODC-BY | Real user-chat data with redaction metadata; strict PII gates stay on. |
 | `aya_dataset` | `CohereLabs/aya_dataset` | Apache-2.0 | Human-annotated multilingual prompt/completion pairs; useful for Chinese/English balance. |
+| `aya_collection_translated_dolly` / `aya_collection_flan_cot` / `aya_collection_flan_qa` | `CohereLabs/aya_collection` | Apache-2.0 | Large translated Aya subsets; cleaner accepts only Chinese/English rows and still enforces strict quality gates. |
 | `helpsteer2` | `nvidia/HelpSteer2` | CC-BY-4.0 | Human preference annotations; final DOPA scoring still filters by coding/tool/security relevance. |
 | `helpsteer3_preference` | `nvidia/HelpSteer3`, `preference` subset | CC-BY-4.0 | Multilingual/code preference rows; keeps only the human-preferred response. |
 
