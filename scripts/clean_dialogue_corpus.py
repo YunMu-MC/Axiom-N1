@@ -55,6 +55,7 @@ class SourceSpec:
     prompt_field: str = "prompt"
     target_field: str = "response"
     notes: str = ""
+    start_offset: int = 0
 
 
 @dataclass(frozen=True)
@@ -433,7 +434,8 @@ SOURCE_SPECS = {
         url="https://huggingface.co/datasets/CohereLabs/aya_collection",
         prompt_field="inputs",
         target_field="targets",
-        notes="Aya Collection translated Dolly subset; accepts only Chinese/English rows after strict quality gates.",
+        notes="Aya Collection translated Dolly subset; starts near the Chinese/Traditional-Chinese segment and accepts only Chinese/English rows.",
+        start_offset=1_700_000,
     ),
     "aya_collection_flan_cot": SourceSpec(
         name="CohereLabs/aya_collection:translated_flan_cot",
@@ -881,6 +883,7 @@ def row_language_is_en_or_zh(row: Mapping[str, Any], *, prompt_field: str, targe
         "zh-hant",
         "simplified chinese",
         "traditional chinese",
+        "yue",
     }
     non_target_markers = {
         "ar",
@@ -908,7 +911,7 @@ def row_language_is_en_or_zh(row: Mapping[str, Any], *, prompt_field: str, targe
     }
     if normalized & en_zh_markers:
         return True
-    if normalized & non_target_markers:
+    if normalized:
         return False
     prompt = str(row.get(prompt_field) or "")
     target = str(row.get(target_field) or "")
@@ -1885,6 +1888,17 @@ def iter_source_conversations(
                 yield conversation
         return
     if backend == "auto":
+        if spec.converter == "prompt_target_en_zh":
+            yield from iter_source_conversations(
+                spec,
+                limit=limit,
+                backend="rows-api",
+                hf_endpoint=hf_endpoint,
+                cache_dir=cache_dir,
+                page_size=page_size,
+                timeout=timeout,
+            )
+            return
         try:
             yield from iter_source_conversations(
                 spec,
@@ -1898,11 +1912,10 @@ def iter_source_conversations(
             return
         except Exception as exc:
             print(f"{spec.name}: datasets backend failed, falling back to streaming rows-api: {exc}", file=sys.stderr)
-            fallback_backend = "hf-mirror-parquet" if hf_endpoint else "rows-api"
             yield from iter_source_conversations(
                 spec,
                 limit=limit,
-                backend=fallback_backend,
+                backend="rows-api",
                 hf_endpoint=hf_endpoint,
                 cache_dir=cache_dir,
                 page_size=page_size,
@@ -1990,7 +2003,7 @@ def iter_rows_api(
     timeout: float,
 ) -> Iterator[dict]:
     emitted = 0
-    offset = 0
+    offset = max(0, int(spec.start_offset))
     page_size = max(1, page_size)
     while limit <= 0 or emitted < limit:
         length = page_size if limit <= 0 else min(page_size, limit - emitted)

@@ -184,6 +184,7 @@ class CleanPolicy:
             "chinese",
             "simplified chinese",
             "traditional chinese",
+            "yue",
         }
     )
     min_turns: int = 2
@@ -904,6 +905,7 @@ def language_group(conversation: ConversationRecord, *, text: str | None = None)
         "chinese",
         "simplified chinese",
         "traditional chinese",
+        "yue",
         "中文",
         "cn",
     }:
@@ -931,6 +933,7 @@ def _record_language(record: dict) -> str:
         "chinese",
         "simplified chinese",
         "traditional chinese",
+        "yue",
         "中文",
         "cn",
     }:

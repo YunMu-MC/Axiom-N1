@@ -107,14 +107,24 @@ def test_convert_rows_filters_aya_collection_to_english_and_chinese_rows():
                 "language_code": "fra",
             },
             {
+                "inputs": "سيوجى هاشموتو کىه? Context: Shōji Hashimoto.",
+                "targets": "This row contains ASCII names but its language marker is not English.",
+                "language_code": "ace",
+            },
+            {
                 "inputs": "How do I validate a tool-call JSON schema?",
                 "targets": "Check required fields, types, and edge cases before execution.",
                 "language_code": "eng",
             },
+            {
+                "inputs": "列出我決定要去邊個大學嘅細節",
+                "targets": "可以比較學費、地點、課程內容同實習機會。",
+                "language_code": "yue",
+            },
         ],
     )
 
-    assert [item.metadata["language"] for item in conversations] == ["zho", "eng"]
+    assert [item.metadata["language"] for item in conversations] == ["zho", "eng", "yue"]
 
 
 def test_convert_rows_supports_dolly_instruction_context_source():
@@ -494,6 +504,42 @@ def test_rust_prefilter_auto_falls_back_to_python_batch_when_binary_fails(monkey
     assert prefilter.to_dict()["fallback_reasons"] == {"runtime_error": 1}
 
 
+def test_auto_backend_falls_back_to_rows_api_not_large_parquet(monkeypatch, tmp_path):
+    spec = validate_selected_sources(["aya_collection_translated_dolly"], allow_restricted_license=False)[0]
+    calls = []
+
+    def fail_dataset(*args, **kwargs):
+        raise AssertionError("prompt_target_en_zh auto backend should go straight to rows-api")
+
+    def fake_rows_api(*args, **kwargs):
+        calls.append(kwargs)
+        yield {
+            "inputs": "怎么验证工具调用参数?",
+            "targets": "先校验 JSON schema, 再检查必填字段和边界值。",
+            "language_code": "zho",
+        }
+
+    def fail_parquet(*args, **kwargs):
+        raise AssertionError("auto backend should not fall back to large parquet downloads")
+
+    monkeypatch.setattr("scripts.clean_dialogue_corpus.iter_dataset_rows", fail_dataset, raising=False)
+    monkeypatch.setattr("scripts.clean_dialogue_corpus.iter_rows_api", fake_rows_api, raising=False)
+    monkeypatch.setattr("scripts.clean_dialogue_corpus.iter_hf_mirror_parquet_rows", fail_parquet, raising=False)
+
+    conversations = list(
+        iter_source_conversations(
+            spec,
+            limit=1,
+            backend="auto",
+            hf_endpoint="https://hf-mirror.com",
+            cache_dir=tmp_path,
+        )
+    )
+
+    assert calls
+    assert conversations[0].messages[0]["content"].startswith("怎么验证")
+
+
 def test_rows_api_streaming_yields_first_page_before_fetching_next_page(monkeypatch, tmp_path):
     spec = validate_selected_sources(["aya_dataset"], allow_restricted_license=False)[0]
     calls = []
@@ -526,6 +572,23 @@ def test_rows_api_streaming_yields_first_page_before_fetching_next_page(monkeypa
     assert conversation.messages[0]["content"].startswith("How do I debug")
     assert conversation.messages[-1]["content"].startswith("Read the traceback")
     assert len(calls) == 1
+
+
+def test_rows_api_starts_from_source_offset(monkeypatch):
+    spec = validate_selected_sources(["aya_collection_translated_dolly"], allow_restricted_license=False)[0]
+    seen_offsets = []
+
+    def fake_fetch_json(url, *, timeout):
+        from urllib.parse import parse_qs, urlparse
+
+        query = parse_qs(urlparse(url).query)
+        seen_offsets.append(int(query["offset"][0]))
+        return {"rows": []}
+
+    monkeypatch.setattr("scripts.clean_dialogue_corpus._fetch_json", fake_fetch_json, raising=False)
+
+    assert list(__import__("scripts.clean_dialogue_corpus", fromlist=["iter_rows_api"]).iter_rows_api(spec, limit=1, page_size=1, timeout=1.0)) == []
+    assert seen_offsets == [1_700_000]
 
 
 def test_hf_mirror_dataset_files_prefers_requested_config(monkeypatch):
