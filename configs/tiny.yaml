@@ -1,0 +1,44 @@
+model:
+  vocab_size: 260
+  max_seq_len: 64
+  d_model: 128
+  n_heads: 4
+  n_kv_heads: 4
+  hot_layers: 2
+  cold_layers: 2
+  cold_block_size: 1
+  ffn_multiplier: 2.0
+  dropout: 0.0
+  tie_embeddings: true
+  use_gradient_checkpointing: false
+dopa:
+  difficulty_threshold: 0.30
+  top_k_cold_blocks: 1
+  skeleton_dim: 128
+  skeleton_vocab_size: 1024
+  skeleton_layers: 1
+  lora_modules: 8
+  lora_rank: 4
+  top_k_lora: 2
+  lora_alpha: 8.0
+offload:
+  enabled: false
+  device: cpu
+  cold_device: cpu
+  max_gpu_cold_blocks: 1
+train:
+  seed: 42
+  batch_size: 2
+  grad_accum_steps: 1
+  learning_rate: 0.0003
+  weight_decay: 0.1
+  max_steps: 20
+  warmup_steps: 2
+  grad_clip: 1.0
+  precision: bf16
+  train_stage: stage1
+  checkpoint_every: 20
+  log_every: 5
+data:
+  train_path: data/toy.jsonl
+  num_workers: 0

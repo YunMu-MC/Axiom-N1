@@ -1,0 +1,49 @@
+# Python environments and caches
+.venv/
+.pip-cache/
+.cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local secrets and machine-specific config
+configs/distill_providers.json
+!configs/distill_providers.example.json
+.env
+.env.*
+!.env.example
+*.env
+configs/*.local.*
+configs/*secret*.*
+configs/*secrets*.*
+
+# Generated training data, corpora, and distillation outputs
+configs/distill_seed_*.jsonl
+data/*
+!data/README.md
+dopa_dialogue_corpus_100gb/
+hf_cache*/
+
+# Training runs, checkpoints, downloaded wheels, and model artifacts
+runs/
+checkpoints/
+downloads/
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.onnx
+*.ckpt
+*.npz
+
+# Rust build output
+rust/**/target/
+
+# Logs and temporary files
+*.bak-*
+*.log
+logs/
+reports/
+tmp/
+temp/

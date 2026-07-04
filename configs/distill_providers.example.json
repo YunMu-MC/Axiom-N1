@@ -1,0 +1,14 @@
+{
+  "providers": [
+    {
+      "name": "openai_compatible_teacher",
+      "api_type": "openai_compatible",
+      "base_url": "https://api.example.invalid",
+      "api_key_env": "DOPA_DISTILL_API_KEY",
+      "default_model": "replace-with-teacher-model",
+      "license_id": "set-per-model",
+      "terms_checked": false,
+      "notes": "Copy this file to distill_providers.json for local use. Keep API keys in .env or the process environment."
+    }
+  ]
+}
